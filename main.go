@@ -9,16 +9,19 @@ import (
 	"strings"
 )
 
-const extension = ".java"
-
-var content string
+var (
+	content   string
+	extension = "java"
+)
 
 func main() {
 	var targetFile string
 
 	flag.StringVar(&targetFile, "file", "file.txt", "file to write to")
+	flag.StringVar(&extension, "extension", "java", "file extension to read")
 	flag.Parse()
 
+	extension = "." + extension
 	sourceDir := flag.Arg(0)
 
 	if sourceDir == "" {
