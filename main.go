@@ -7,22 +7,27 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/exp/slices"
 )
 
 var (
 	content   string
-	extension = "java"
+	extension = "kt"
+	ignore    string
 )
 
 func main() {
 	var targetFile string
 
 	flag.StringVar(&targetFile, "file", "file.txt", "file to write to")
-	flag.StringVar(&extension, "extension", "java", "file extension to read")
+	flag.StringVar(&extension, "extension", "kt", "file extension to read")
+	flag.StringVar(&ignore, "ignore", "", "directories to ignore, separated by comma")
 	flag.Parse()
 
 	extension = "." + extension
 	sourceDir := flag.Arg(0)
+	pathsToIgnore := strings.Split(ignore, ",")
 
 	if sourceDir == "" {
 		panic("source directory is required")
@@ -43,7 +48,7 @@ func main() {
 		panic("failed to read directory:" + err.Error())
 	}
 
-	readFiles(files, sourceDir)
+	readFiles(files, sourceDir, pathsToIgnore)
 
 	_, err = file.WriteString(content)
 	if err != nil {
@@ -51,15 +56,19 @@ func main() {
 	}
 }
 
-func readFiles(files []fs.DirEntry, root string) {
+func readFiles(files []fs.DirEntry, root string, pathsToIgnore []string) {
 	for _, file := range files {
 		if file.IsDir() {
+			if slices.Contains(pathsToIgnore, file.Name()) {
+				continue
+			}
+
 			contents, err := os.ReadDir(filepath.Join(root, file.Name()))
 			if err != nil {
 				panic("failed to read directory:" + err.Error())
 			}
 
-			readFiles(contents, filepath.Join(root, file.Name()))
+			readFiles(contents, filepath.Join(root, file.Name()), pathsToIgnore)
 		}
 
 		if file.Type().IsRegular() {
