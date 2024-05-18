@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,10 +18,29 @@ var (
 	ignore    string
 )
 
+func normaliseTargetFileName(targetFile string) (string, error) {
+	// Expand tilda to home directory
+	if strings.HasPrefix(targetFile, "~") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get home directory: %s", err.Error())
+		}
+
+		targetFile = strings.Replace(targetFile, "~", home, 1)
+	}
+
+	targetFile, err := filepath.Abs(targetFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path: %s", err.Error())
+	}
+
+	return targetFile, nil
+}
+
 func main() {
 	var targetFile string
 
-	flag.StringVar(&targetFile, "file", "file.txt", "file to write to")
+	flag.StringVar(&targetFile, "file", "./file.txt", "file to write to")
 	flag.StringVar(&extension, "extension", "kt", "file extension to read")
 	flag.StringVar(&ignore, "ignore", "", "directories to ignore, separated by comma")
 	flag.Parse()
@@ -37,12 +57,6 @@ func main() {
 		panic("target file is required")
 	}
 
-	file, err := os.OpenFile(targetFile, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		panic("failed to open file:" + err.Error())
-	}
-	defer file.Close()
-
 	files, err := os.ReadDir(sourceDir)
 	if err != nil {
 		panic("failed to read directory:" + err.Error())
@@ -50,7 +64,12 @@ func main() {
 
 	readFiles(files, sourceDir, pathsToIgnore)
 
-	_, err = file.WriteString(content)
+	targetFile, err = normaliseTargetFileName(targetFile)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	err = os.WriteFile(targetFile, []byte(content), 0644)
 	if err != nil {
 		panic("failed to write to file to target file:" + err.Error())
 	}
@@ -87,8 +106,8 @@ func readFile(filename string, path string) {
 		panic("failed to read file:" + err.Error())
 	}
 
-	fmt.Println("Reading file:", filename)
-	content += fmt.Sprintf("// %s\n", filename)
+	log.Println("Reading file: ", filename)
+	content += fmt.Sprintf("// File: %s\n", filename)
 	content += string(c)
-	content += "\n\n\n"
+	content += "\n\n\n\n"
 }
