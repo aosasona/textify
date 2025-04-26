@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,9 +13,11 @@ import (
 )
 
 var (
-	content   string
-	extension = "kt"
-	ignore    string
+	sourceDir  string
+	content    string
+	extensions = []string{"go"}
+	ignore     string
+	filesCount int
 )
 
 func normaliseTargetFileName(targetFile string) (string, error) {
@@ -41,12 +43,16 @@ func main() {
 	var targetFile string
 
 	flag.StringVar(&targetFile, "file", "./file.txt", "file to write to")
-	flag.StringVar(&extension, "extension", "kt", "file extension to read")
-	flag.StringVar(&ignore, "ignore", "", "directories to ignore, separated by comma")
+	extensionsStr := flag.String("extensions", "go", "file extension to read")
+	flag.StringVar(&ignore, "ignore", "node_modules", "directories to ignore, separated by comma")
 	flag.Parse()
 
-	extension = "." + extension
-	sourceDir := flag.Arg(0)
+	extensions = strings.Split(*extensionsStr, ",")
+	for i := range extensions {
+		extensions[i] = "." + strings.TrimSpace(extensions[i])
+	}
+
+	sourceDir = flag.Arg(0)
 	pathsToIgnore := strings.Split(ignore, ",")
 
 	if sourceDir == "" {
@@ -69,10 +75,12 @@ func main() {
 		panic(err.Error())
 	}
 
-	err = os.WriteFile(targetFile, []byte(content), 0644)
+	err = os.WriteFile(targetFile, []byte(strings.TrimSpace(content)), 0644)
 	if err != nil {
 		panic("failed to write to file to target file:" + err.Error())
 	}
+
+	slog.Info("done", slog.String("targetFile", targetFile), slog.Int("filesCount", filesCount))
 }
 
 func readFiles(files []fs.DirEntry, root string, pathsToIgnore []string) {
@@ -97,7 +105,9 @@ func readFiles(files []fs.DirEntry, root string, pathsToIgnore []string) {
 }
 
 func readFile(filename string, path string) {
-	if !strings.HasSuffix(path, extension) {
+	ext := filepath.Ext(filename)
+	if !slices.Contains(extensions, ext) {
+		slog.Debug("skipping file", slog.String("file", filename), slog.String("ext", ext))
 		return
 	}
 
@@ -106,8 +116,12 @@ func readFile(filename string, path string) {
 		panic("failed to read file:" + err.Error())
 	}
 
-	log.Println("Reading file: ", filename)
-	content += fmt.Sprintf("// File: %s\n", filename)
-	content += string(c)
+	slog.Info("reading file", slog.String("file", filename), slog.String("ext", ext))
+
+	// For example, if the source directory is "src" and the file is "src/main.go", the nameWithDirectory will be "main.go"
+	nameWithDirectory := strings.TrimPrefix(strings.TrimPrefix(path, sourceDir), "/")
+	content += fmt.Sprintf("// File: %s\n", nameWithDirectory)
+	content += strings.TrimSpace(string(c))
 	content += "\n\n\n\n"
+	filesCount++
 }
